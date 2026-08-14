@@ -371,10 +371,18 @@ def make_base_props(args):
         props.append("ro.build.fingerprint=" + prop_fp)
 
     # On x86_64 hosts with the ARM translation layer installed, tell Android
-    # to use the native bridge so ARM-only apps can run. The [properties]
-    # section below can still override this if needed.
+    # to use the native bridge so ARM-only apps can run, and advertise the
+    # emulated ABIs. Advertising arm64-v8a/armeabi-v7a/armeabi in
+    # ro.product.cpu.abilist is what makes both the local PackageManager
+    # accept ARM APKs (INSTALL_FAILED_NO_MATCHING_ABIS) and the Play
+    # delivery check (Aurora's device profile "Platforms") serve them at
+    # all. The [properties] section below can still override any of these.
     if tools.helpers.arm_translation.is_installed():
         props.append("ro.dalvik.vm.native.bridge=libndk_translation.so")
+        props.append("ro.product.cpu.abilist=x86_64,x86,arm64-v8a,armeabi-v7a,armeabi")
+        props.append("ro.product.cpu.abilist64=x86_64,arm64-v8a")
+        props.append("ro.product.cpu.abilist32=x86,armeabi-v7a,armeabi")
+        props.append("ro.product.cpu.abi=x86_64")
 
     # now append/override with values in [properties] section of waydroid.cfg
     cfg = tools.config.load(args)

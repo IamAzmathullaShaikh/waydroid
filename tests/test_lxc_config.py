@@ -142,6 +142,77 @@ def test_session_config_arm_translation_entries(monkeypatch, tmp_path):
             "none bind,create=dir,optional 0 0") in content
 
 
+def test_make_base_props_advertises_arm_abis_when_translation_installed(
+        monkeypatch, tmp_path):
+    """With libndk_translation installed, the base props must advertise the
+    emulated ARM ABIs so the Play delivery check and local PackageManager
+    accept ARM-only APKs."""
+    work = tmp_path / "work"
+    work.mkdir()
+    args = types.SimpleNamespace(
+        work=str(work),
+        vendor_type="MAINLINE",
+        images_path="/usr/share/waydroid-extra/images",
+        system_ota="None",
+        vendor_ota="None",
+    )
+
+    monkeypatch.setattr("os.path.exists", lambda path: True)
+    monkeypatch.setattr("tools.helpers.props.host_get", lambda *a, **k: "")
+    monkeypatch.setattr("tools.helpers.props.host_list", lambda *a, **k: {})
+    monkeypatch.setattr("tools.helpers.gpu.getDriNode",
+                        lambda args: (None, ""))
+    monkeypatch.setattr("tools.helpers.gpu.getVulkanDriver",
+                        lambda *a, **k: None)
+    monkeypatch.setattr("tools.helpers.arm_translation.is_installed",
+                        lambda: True)
+    monkeypatch.setattr("tools.config.load",
+                        lambda args: {"properties": {}})
+
+    lxc.make_base_props(args)
+
+    props = (work / "waydroid_base.prop").read_text().splitlines()
+    assert "ro.dalvik.vm.native.bridge=libndk_translation.so" in props
+    assert ("ro.product.cpu.abilist=x86_64,x86,arm64-v8a,"
+            "armeabi-v7a,armeabi") in props
+    assert "ro.product.cpu.abilist64=x86_64,arm64-v8a" in props
+    assert "ro.product.cpu.abilist32=x86,armeabi-v7a,armeabi" in props
+    assert "ro.product.cpu.abi=x86_64" in props
+
+
+def test_make_base_props_keeps_x86_abis_without_translation(
+        monkeypatch, tmp_path):
+    """Without the translation layer, the image's x86-only ABI list must be
+    left untouched (no ARM ABIs advertised)."""
+    work = tmp_path / "work"
+    work.mkdir()
+    args = types.SimpleNamespace(
+        work=str(work),
+        vendor_type="MAINLINE",
+        images_path="/usr/share/waydroid-extra/images",
+        system_ota="None",
+        vendor_ota="None",
+    )
+
+    monkeypatch.setattr("os.path.exists", lambda path: True)
+    monkeypatch.setattr("tools.helpers.props.host_get", lambda *a, **k: "")
+    monkeypatch.setattr("tools.helpers.props.host_list", lambda *a, **k: {})
+    monkeypatch.setattr("tools.helpers.gpu.getDriNode",
+                        lambda args: (None, ""))
+    monkeypatch.setattr("tools.helpers.gpu.getVulkanDriver",
+                        lambda *a, **k: None)
+    monkeypatch.setattr("tools.helpers.arm_translation.is_installed",
+                        lambda: False)
+    monkeypatch.setattr("tools.config.load",
+                        lambda args: {"properties": {}})
+
+    lxc.make_base_props(args)
+
+    props = (work / "waydroid_base.prop").read_text().splitlines()
+    assert "ro.dalvik.vm.native.bridge=libndk_translation.so" not in props
+    assert not any(p.startswith("ro.product.cpu.abilist") for p in props)
+
+
 def test_session_config_rejects_newline_in_mount_path(monkeypatch, tmp_path):
     xdg = tmp_path / "xdg"
     xdg.mkdir()

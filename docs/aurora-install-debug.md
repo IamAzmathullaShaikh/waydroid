@@ -94,6 +94,58 @@ Artifacts: `system/lib64/libndk_translation.so`, `system/lib64/libndk_translatio
 3. **Aurora → Settings → device spoofing**: pick an x86_64-capable profile so Play serves
    universal/x86 builds where they exist (partial fix — cannot create x86 builds that don't exist).
 
+## Second failure mode: AppNotSupported (code=2) — Play delivery gate
+
+Aurora can also fail with `AppNotSupported(code=2, reason=App not supported)`
+from `PurchaseHelper.purchase` — this happens **before any APK downloads**
+and is a different gate than the local `-113`:
+
+```
+AppNotSupported(code=2, reason=App not supported)
+    at com.aurora.gplayapi.helpers.PurchaseHelper.purchase(...)
+    at com.aurora.store.data.work.DownloadWorker(...)
+```
+
+**Mechanism:** Aurora presents the device profile stored in its auth data
+(`com.aurora.store_preferences.xml`, `PREFERENCE_AUTH_DATA`):
+
+```json
+"Platforms": "x86_64,x86",
+"Build.MODEL": "WayDroid x86_64 Device",
+"Build.FINGERPRINT": "waydroid/lineage_waydroid_x86_64/..."
+```
+
+Google Play's delivery check reads the device's ABI list and **refuses to
+serve** apps that have no x86 build — the APK never reaches the device.
+Unlike `-113` (APK downloaded but ARM libs can't be extracted), this one is
+rejected server-side.
+
+### Why the fork's arm-translation now fixes BOTH gates
+
+Original fork implementation only set `ro.dalvik.vm.native.bridge` — which
+fixes local extraction but not Play's delivery gate, because the device still
+advertised `x86_64,x86` only. Real native-bridge setups (ChromeOS, redroid)
+also put the emulated ABIs in `ro.product.cpu.abilist`. The fork now does
+that too (`tools/helpers/lxc.py:make_base_props`), so with the layer
+installed the device advertises:
+
+```
+ro.dalvik.vm.native.bridge=libndk_translation.so
+ro.product.cpu.abilist=x86_64,x86,arm64-v8a,armeabi-v7a,armeabi
+ro.product.cpu.abilist64=x86_64,arm64-v8a
+ro.product.cpu.abilist32=x86,armeabi-v7a,armeabi
+```
+
+After a container restart, Aurora re-checks in with the new profile
+(`Platforms` now includes arm64-v8a) and Play delivers ARM-only apps;
+the native bridge then runs them.
+
+Aurora's own troubleshooting wiki confirms the fix direction: the error
+means the device config's architecture doesn't match the app; the container
+must advertise the ARM ABIs (or the user spoofs an ARM device profile in
+Aurora — which only moves the failure to `-113` unless the translation
+layer is also installed).
+
 ## Note on "fresh install with all fixes"
 
 All of the fork's fixes (ServiceRunner hardening, dispatch guards, `@BINDIR@` substitution,
