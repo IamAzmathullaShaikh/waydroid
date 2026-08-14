@@ -90,6 +90,8 @@ def test_session_config_binds_wayland_and_userdata(monkeypatch, tmp_path):
     monkeypatch.setitem(tools.config.defaults,
                         "container_pulse_runtime_path", "/run/xdg/pulse")
     monkeypatch.setattr("tools.helpers.run.user", lambda *a, **k: None)
+    monkeypatch.setattr(tools.helpers.arm_translation, "sync_to_overlay",
+                        lambda: None)
 
     lxc.generate_session_lxc_config(args, session)
 
@@ -102,7 +104,7 @@ def test_session_config_binds_wayland_and_userdata(monkeypatch, tmp_path):
     assert ("lxc.mount.entry = {0} data none rbind 0 0".format(data)) in content
 
 
-def test_session_config_arm_translation_entries(monkeypatch, tmp_path):
+def test_session_config_arm_translation_syncs_overlay(monkeypatch, tmp_path):
     xdg = tmp_path / "xdg"
     xdg.mkdir()
     session = {
@@ -122,24 +124,14 @@ def test_session_config_arm_translation_entries(monkeypatch, tmp_path):
     monkeypatch.setitem(tools.config.defaults,
                         "container_pulse_runtime_path", "/run/xdg/pulse")
     monkeypatch.setattr("tools.helpers.run.user", lambda *a, **k: None)
+    sync_called = []
     monkeypatch.setattr(
-        tools.helpers.arm_translation, "mount_entries",
-        lambda: [("/var/lib/waydroid/arm-translation/system/lib64/"
-                  "libndk_translation.so",
-                  "system/lib64/libndk_translation.so", "file"),
-                 ("/var/lib/waydroid/arm-translation/system/lib64/"
-                  "ndk_translation",
-                  "system/lib64/ndk_translation", "dir")])
+        tools.helpers.arm_translation, "sync_to_overlay",
+        lambda: sync_called.append(True))
 
     lxc.generate_session_lxc_config(args, session)
 
-    content = (work / "config_session").read_text()
-    assert ("lxc.mount.entry = /var/lib/waydroid/arm-translation/system/lib64/"
-            "libndk_translation.so system/lib64/libndk_translation.so "
-            "none bind,create=file,optional 0 0") in content
-    assert ("lxc.mount.entry = /var/lib/waydroid/arm-translation/system/lib64/"
-            "ndk_translation system/lib64/ndk_translation "
-            "none bind,create=dir,optional 0 0") in content
+    assert sync_called == [True]
 
 
 def test_make_base_props_advertises_arm_abis_when_translation_installed(

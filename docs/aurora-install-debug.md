@@ -146,6 +146,41 @@ must advertise the ARM ABIs (or the user spoofs an ARM device profile in
 Aurora — which only moves the failure to `-113` unless the translation
 layer is also installed).
 
+## Resolution: one-command install + verified ARM execution
+
+`waydroid arm-translation install` now works with **no flags**: it fetches the
+known-good community prebuilt (supremegamers/vendor_google_proprietary_
+ndk_translation-prebuilt, Android 13, md5-verified), extracts it, validates
+the /system tree, and writes the full native-bridge prop set. The artifacts
+are synced into the container's /system overlay at session start (before the
+overlay mounts — bind-mounting into the read-only /system fails silently),
+which mirrors how waydroid_script does it.
+
+Verified end-to-end on this box (2026-08-14):
+
+```
+$ sudo waydroid arm-translation install      # downloads 17.8 MB, md5-checked
+$ waydroid container restart
+
+# in the container:
+ro.product.cpu.abilist  = x86_64,x86,arm64-v8a,armeabi-v7a,armeabi
+ro.dalvik.vm.native.bridge = libndk_translation.so
+ro.dalvik.vm.isa.arm64 = x86_64
+binfmt_misc arm64_exe = enabled (magic 7f454c4602010100...0200b7)
+
+$ adb install armonly.apk                     # previously -113 → Success
+$ adb shell am start -n com.example.armapp/.MainActivity
+08-14 09:14:45.992  1990  1990 I ndk_translation: Initialized NDK translation (aarch64), version 0.2.3
+08-14 09:14:46.072  261  279 I ActivityTaskManager: Displayed com.example.armapp/.MainActivity: +100ms
+```
+
+The test app carried a real AArch64 `.so` (`mov w0, #42; ret`) loaded via
+`System.loadLibrary`; its activity rendered, proving the ARM64 code actually
+executed through libndk_translation (a missing layer crashes with
+`UnsatisfiedLinkError` before onCreate). Aurora Store should now both serve
+ARM-only apps (delivery gate fixed via abilist advertising) and install them
+(-113 fixed via the native bridge).
+
 ## Note on "fresh install with all fixes"
 
 All of the fork's fixes (ServiceRunner hardening, dispatch guards, `@BINDIR@` substitution,

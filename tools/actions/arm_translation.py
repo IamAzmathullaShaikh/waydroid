@@ -1,5 +1,6 @@
 # Copyright 2026 Waydroid Project
 # SPDX-License-Identifier: GPL-3.0-or-later
+import hashlib
 import logging
 import os
 import shutil
@@ -34,8 +35,64 @@ def _extract_archive(archive_path, dest):
     elif zipfile.is_zipfile(archive_path):
         with zipfile.ZipFile(archive_path) as handle:
             handle.extractall(dest)
+            # zipfile does not restore the unix permission bits that
+            # tarfile keeps; the prebuilt's bin/ executables must stay
+            # executable for binfmt_misc to run them.
+            for info in handle.infolist():
+                mode = (info.external_attr >> 16) & 0o7777
+                if mode and not info.is_dir():
+                    os.chmod(os.path.join(dest, info.filename),
+                             mode & 0o7777)
     else:
         raise RuntimeError("Unsupported archive format: " + archive_path)
+
+
+def _md5(path):
+    """md5 of a file, for verifying downloaded archives."""
+    digest = hashlib.md5()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _find_prebuilts_root(extracted):
+    """Locate the directory holding the artifacts inside an extracted tree.
+
+    The community prebuilt archive (supremegamers/vendor_google_...)
+    nests the files under ``prebuilts/`` inside a repo-name directory; plain
+    user-made archives may put them directly at the top. Returns the path
+    whose children look like a /system tree (lib/lib64/etc/bin).
+    """
+    candidates = [extracted]
+    for root, dirs, files in os.walk(extracted):
+        if "lib64" in dirs and "lib" in dirs and "etc" in dirs:
+            candidates.append(root)
+    # Deepest match first: a prebuilts/ dir wins over the archive root.
+    candidates.sort(key=lambda p: p.count(os.sep), reverse=True)
+    for candidate in candidates:
+        if (os.path.isdir(candidate + "/lib64")
+                and os.path.isdir(candidate + "/etc")):
+            return candidate
+    return None
+
+
+def _copy_to_system_tree(root, dest):
+    """Copy a /system artifact tree into dest/system/.
+
+    The helper stores artifacts as ``work/arm-translation/system/...``
+    (mirroring the container /system paths); ``root`` is a directory whose
+    children are the top-level /system entries (lib/lib64/etc/bin).
+    """
+    system_dir = dest + "/system"
+    os.makedirs(system_dir, exist_ok=True)
+    for name in os.listdir(root):
+        source_path = os.path.join(root, name)
+        target_path = os.path.join(system_dir, name)
+        if os.path.isdir(source_path):
+            shutil.copytree(source_path, target_path, dirs_exist_ok=True)
+        else:
+            shutil.copy2(source_path, target_path)
 
 
 def _regenerate_base_props(args):
@@ -58,12 +115,17 @@ def install(args):
     # The action always runs as root (ROOT_ACTIONS), so plain rmtree works.
     shutil.rmtree(dest, ignore_errors=True)
 
+    extracted = None
     if args.source:
         source = os.path.abspath(args.source)
         if not os.path.isdir(source):
             raise RuntimeError("Source is not a directory: " + args.source)
-        os.makedirs(dest)
-        shutil.copytree(source, dest, dirs_exist_ok=True)
+        root = _find_prebuilts_root(source)
+        if root is None:
+            raise RuntimeError(
+                "Source does not look like a /system artifact tree (no "
+                "lib64/ and etc/ directories): " + args.source)
+        _copy_to_system_tree(root, dest)
     elif args.archive or args.url:
         archive = args.archive
         if args.url:
@@ -72,21 +134,54 @@ def install(args):
             if archive is None:
                 raise RuntimeError(
                     "Failed to download the ARM translation archive")
-        os.makedirs(dest)
-        _extract_archive(archive, dest)
+        if (args.url and args.url == arm_translation.DEFAULT_ARCHIVE_URL
+                and _md5(archive) != arm_translation.DEFAULT_ARCHIVE_MD5):
+            raise RuntimeError("Downloaded archive failed the integrity "
+                               "check; refusing to install")
+        extracted = dest + ".extract"
+        shutil.rmtree(extracted, ignore_errors=True)
+        os.makedirs(extracted)
+        _extract_archive(archive, extracted)
+        root = _find_prebuilts_root(extracted)
+        if root is None:
+            shutil.rmtree(extracted, ignore_errors=True)
+            raise RuntimeError(
+                "The archive does not contain a /system artifact tree "
+                "(no lib64/ and etc/ directories)")
+        _copy_to_system_tree(root, dest)
+        shutil.rmtree(extracted, ignore_errors=True)
     else:
-        raise RuntimeError(
-            "Specify --source <dir>, --archive <file> or --url <url> with "
-            "the ARM translation artifacts")
+        # No source given: fetch the known-good default prebuilt.
+        logging.info("Downloading the standard libndk_translation prebuilt "
+                     "(Android 13)...")
+        archive = helpers.http.download(
+            args, arm_translation.DEFAULT_ARCHIVE_URL, "arm_translation")
+        if archive is None:
+            raise RuntimeError(
+                "Failed to download the ARM translation archive")
+        if _md5(archive) != arm_translation.DEFAULT_ARCHIVE_MD5:
+            raise RuntimeError("Downloaded archive failed the integrity "
+                               "check; refusing to install")
+        extracted = dest + ".extract"
+        shutil.rmtree(extracted, ignore_errors=True)
+        os.makedirs(extracted)
+        _extract_archive(archive, extracted)
+        root = _find_prebuilts_root(extracted)
+        if root is None:
+            shutil.rmtree(extracted, ignore_errors=True)
+            raise RuntimeError(
+                "The default archive does not contain a /system artifact "
+                "tree (no lib64/ and etc/ directories)")
+        _copy_to_system_tree(root, dest)
+        shutil.rmtree(extracted, ignore_errors=True)
 
     if not arm_translation.is_installed():
         shutil.rmtree(dest, ignore_errors=True)
         raise RuntimeError(
             "The provided files are missing the expected layout; expected "
             "at least system/lib64/libndk_translation.so, "
-            "system/lib64/libndk_translation_proxy.so and "
-            "system/lib64/ndk_translation/libarm64.so. Nothing was "
-            "installed.")
+            "system/lib64/arm64/libc.so and "
+            "system/etc/init/ndk_translation.rc. Nothing was installed.")
 
     _regenerate_base_props(args)
     logging.info("ARM translation layer installed; restart the container "

@@ -217,13 +217,13 @@ def generate_session_lxc_config(args, session):
     if not make_entry(session["waydroid_data"], "data", options="rbind 0 0"):
         raise OSError("Failed to bind userdata")
 
-    # ARM64 translation layer (x86_64 hosts): bind the installed
-    # libndk_translation artifacts into the container's /system so Android's
-    # native bridge can load them. No-ops when nothing is installed.
-    for host_path, container_path, kind in \
-            tools.helpers.arm_translation.mount_entries():
-        make_entry(host_path, container_path,
-                   options="bind,create={},optional 0 0".format(kind))
+    # ARM64 translation layer (x86_64 hosts): copy the installed
+    # libndk_translation artifacts into the container's /system overlay
+    # lowerdir, which happens before mount_rootfs() mounts the overlay, so
+    # the files land at /system inside the container. Bind-mounting into
+    # /system is not possible: the overlay is mounted read-only and the
+    # mount targets cannot be created. No-ops when nothing is installed.
+    tools.helpers.arm_translation.sync_to_overlay()
 
     lxc_path = tools.config.defaults["lxc"] + "/waydroid"
     config_nodes_tmp_path = args.work + "/config_session"
@@ -376,13 +376,11 @@ def make_base_props(args):
     # ro.product.cpu.abilist is what makes both the local PackageManager
     # accept ARM APKs (INSTALL_FAILED_NO_MATCHING_ABIS) and the Play
     # delivery check (Aurora's device profile "Platforms") serve them at
-    # all. The [properties] section below can still override any of these.
+    # all. The ro.dalvik.vm.isa.* mapping is required by ART and the
+    # ndk_translation binfmt_misc registration. The [properties] section
+    # below can still override any of these.
     if tools.helpers.arm_translation.is_installed():
-        props.append("ro.dalvik.vm.native.bridge=libndk_translation.so")
-        props.append("ro.product.cpu.abilist=x86_64,x86,arm64-v8a,armeabi-v7a,armeabi")
-        props.append("ro.product.cpu.abilist64=x86_64,arm64-v8a")
-        props.append("ro.product.cpu.abilist32=x86,armeabi-v7a,armeabi")
-        props.append("ro.product.cpu.abi=x86_64")
+        props.extend(tools.helpers.arm_translation.NATIVE_BRIDGE_PROPS)
 
     # now append/override with values in [properties] section of waydroid.cfg
     cfg = tools.config.load(args)
