@@ -1,5 +1,6 @@
 # Copyright 2021 Erfan Abdi
 # SPDX-License-Identifier: GPL-3.0-or-later
+from tools.actions import arm_translation
 from tools.actions.initializer import init, remote_init_client
 from tools.actions.upgrader import upgrade
 from tools.actions.session_manager import start, stop

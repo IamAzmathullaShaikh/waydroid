@@ -136,6 +136,27 @@ def arguments_bugreport(subparser):
     ret = subparser.add_parser("bugreport", help="create a bugreport archive interactively")
     return ret
 
+def arguments_arm_translation(subparser):
+    ret = subparser.add_parser(
+        "arm-translation",
+        help="manage the ARM64 translation layer (libndk_translation) "
+             "for running ARM apps on x86_64 hosts")
+    sub = ret.add_subparsers(title="subaction", dest="subaction")
+    install = sub.add_parser("install",
+                             help="install the ARM translation layer")
+    install.add_argument("--source",
+                         help="directory with the artifacts (system/... layout)")
+    install.add_argument("--archive",
+                         help="path to a .tar/.tar.gz/.tar.xz/.zip archive")
+    install.add_argument("--url",
+                         help="URL of an archive to download")
+    install.add_argument("--default", action="store_true",
+                         help="fetch the standard libndk_translation prebuilt "
+                              "(third-party archive, md5-verified)")
+    sub.add_parser("status", help="show the ARM translation state")
+    sub.add_parser("uninstall", help="remove the ARM translation layer")
+    return ret
+
 def arguments():
     parser = argparse.ArgumentParser(prog="waydroid")
 
@@ -173,6 +194,7 @@ def arguments():
     arguments_logcat(sub)
     arguments_adb(sub)
     arguments_bugreport(sub)
+    arguments_arm_translation(sub)
 
     if argcomplete:
         argcomplete.autocomplete(parser, always_complete_options="long")

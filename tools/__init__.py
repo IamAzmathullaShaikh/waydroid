@@ -140,6 +140,17 @@ def main():
                 pass
         elif args.action == "bugreport":
             actions.bugreport(args)
+        elif args.action == "arm-translation":
+            actionNeedRoot(args.action)
+            if args.subaction == "install":
+                actions.arm_translation.install(args)
+            elif args.subaction == "status":
+                actions.arm_translation.status(args)
+            elif args.subaction == "uninstall":
+                actions.arm_translation.uninstall(args)
+            else:
+                logging.info(
+                    "Run waydroid {} -h for usage information.".format(args.action))
         else:
             logging.info("Run waydroid -h for usage information.")
 

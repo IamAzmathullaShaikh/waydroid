@@ -212,6 +212,14 @@ def generate_session_lxc_config(args, session):
     if not make_entry(session["waydroid_data"], "data", options="rbind 0 0"):
         raise OSError("Failed to bind userdata")
 
+    # ARM64 translation layer (x86_64 hosts): copy the installed
+    # libndk_translation artifacts into the container's /system overlay
+    # lowerdir, which happens before mount_rootfs() mounts the overlay, so
+    # the files land at /system inside the container. Bind-mounting into
+    # /system is not possible: the overlay is mounted read-only and the
+    # mount targets cannot be created. No-ops when nothing is installed.
+    tools.helpers.arm_translation.sync_to_overlay()
+
     lxc_path = tools.config.defaults["lxc"] + "/waydroid"
     config_nodes_tmp_path = args.work + "/config_session"
     with open(config_nodes_tmp_path, "w") as f:
@@ -356,6 +364,18 @@ def make_base_props(args):
     prop_fp = tools.helpers.props.host_get(args, "ro.vendor.build.fingerprint")
     if prop_fp != "":
         props.append("ro.build.fingerprint=" + prop_fp)
+
+    # On x86_64 hosts with the ARM translation layer installed, tell Android
+    # to use the native bridge so ARM-only apps can run, and advertise the
+    # emulated ABIs. Advertising arm64-v8a/armeabi-v7a/armeabi in
+    # ro.product.cpu.abilist is what makes both the local PackageManager
+    # accept ARM APKs (INSTALL_FAILED_NO_MATCHING_ABIS) and the Play
+    # delivery check (Aurora's device profile "Platforms") serve them at
+    # all. The ro.dalvik.vm.isa.* mapping is required by ART and the
+    # ndk_translation binfmt_misc registration. The [properties] section
+    # below can still override any of these.
+    if tools.helpers.arm_translation.is_installed():
+        props.extend(tools.helpers.arm_translation.NATIVE_BRIDGE_PROPS)
 
     # now append/override with values in [properties] section of waydroid.cfg
     cfg = tools.config.load(args)
