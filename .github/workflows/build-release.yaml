@@ -1,0 +1,146 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+#
+# Build a self-contained Waydroid release package (tooling + latest Android
+# images + optional ARM64 translation layer) and publish it as a GitHub
+# Release asset.
+#
+# The channel input selects the image source:
+#   official          - latest validated build from ota.waydro.id (A13/LOS20)
+#   community-los22   - latest matching WayDroid-ATV build (Android 14)
+#   community-los23   - latest matching WayDroid-ATV build (Android 15/16)
+#
+# Full LineageOS source builds (~300 GB disk, ~5 h) cannot run on
+# GitHub-hosted runners, so this workflow packages the upstream-published
+# images instead, validating their SHA-256 checksums (official channel) or
+# computing and recording them (community channel). See docs/LICENSING.md
+# for the licensing/liability review of everything this packages.
+
+name: Build release package
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Image source channel
+        type: choice
+        options:
+          - official
+          - community-los22
+          - community-los23
+        default: official
+      arch:
+        description: Target architecture
+        type: choice
+        options:
+          - x86_64
+          - arm64
+        default: x86_64
+      system_type:
+        description: System image variant (GAPPS for Play Services)
+        type: choice
+        options:
+          - VANILLA
+          - GAPPS
+        default: VANILLA
+      include_arm_translation:
+        description: Bundle the ARM64 translation layer (x86_64 hosts)
+        type: boolean
+        default: true
+      version:
+        description: Version string for the package name
+        type: string
+        default: "1.6.4"
+  schedule:
+    # Weekly rebuild of the latest official images.
+    - cron: "30 3 * * 1"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install checks
+        run: |
+          pip install ruff pytest
+
+      - name: Run checks (lint + tests)
+        run: |
+          make check PYTHON=python3
+
+      - name: Stage tooling install tree
+        run: |
+          make install DESTDIR="$RUNNER_TEMP/stage"
+
+      - name: Build release package
+        id: package
+        env:
+          CHANNEL: ${{ inputs.channel || 'official' }}
+          ARCH: ${{ inputs.arch || 'x86_64' }}
+          SYSTEM_TYPE: ${{ inputs.system_type || 'VANILLA' }}
+          VERSION: ${{ inputs.version || '1.6.4' }}
+          INCLUDE_ARM: ${{ inputs.include_arm_translation }}
+        run: |
+          mkdir -p dist
+          ARGS=(--tooling "$RUNNER_TEMP/stage" --channel "$CHANNEL" \
+                --arch "$ARCH" --system-type "$SYSTEM_TYPE" \
+                --version "$VERSION" --out dist)
+          if [ "$INCLUDE_ARM" = "false" ]; then
+            ARGS+=(--no-arm-translation)
+          fi
+          python3 tools/release/package.py "${ARGS[@]}"
+          echo "package=$(ls dist/*.tar.xz | head -1)" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(sha256sum dist/*.tar.xz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: release-${{ github.run_number }}
+          name: Waydroid release package ${{ inputs.version || '1.6.4' }}
+          body: |
+            ## Waydroid release package
+
+            Self-contained package: Waydroid tooling + latest Android images
+            + ARM64 translation layer. See docs/LICENSING.md for the full
+            licensing review.
+
+            - Channel: `${{ inputs.channel || 'official' }}`
+            - Arch: `${{ inputs.arch || 'x86_64' }}`
+            - System type: `${{ inputs.system_type || 'VANILLA' }}`
+            - ARM translation layer: `${{ inputs.include_arm_translation || true }}`
+            - SHA-256: `${{ steps.package.outputs.sha256 }}`
+
+            ### Install
+
+            ```sh
+            tar -xJf waydroid-*.tar.xz
+            cd waydroid-*/
+            sudo ./install.sh
+            sudo waydroid init -i /usr/share/waydroid-extra/images
+            waydroid session start
+            ```
+
+            ### Sources
+
+            - Tooling: this repository (GPL-3.0-or-later)
+            - Images: official Waydroid OTA (ota.waydro.id) or WayDroid-ATV
+              community builds (LineageOS, Apache-2.0 framework / GPL-2.0 kernel)
+            - ARM translation: Google ndk_translation (Apache-2.0)
+
+            NO WARRANTY — provided "as is" (GPLv3 §15-16). Use at your own
+            risk.
+          files: dist/*.tar.xz
+          fail_on_unmatched_files: true
