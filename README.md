@@ -109,6 +109,71 @@ Google Play's delivery check accept ARM-only apps. After installing, restart
 the container (`waydroid container restart`); remove it with
 `waydroid arm-translation uninstall`.
 
+## Release packages
+
+The GitHub Actions workflow [build-release.yaml](.github/workflows/build-release.yaml)
+builds a self-contained release package (tooling + latest Android images +
+ARM64 translation layer) and publishes it under the repository's
+[Releases](https://github.com/IamAzmathullaShaikh/waydroid/releases) page.
+It runs weekly and can be triggered manually with the desired inputs:
+
+- **channel**: `official` (latest validated build from ota.waydro.id,
+  Android 13 / LineageOS 20) or `community-los22`/`community-los23` (latest
+  matching WayDroid-ATV builds, Android 14–16).
+- **arch**: `x86_64` or `arm64`.
+- **system_type**: `VANILLA` or `GAPPS` (Play Services preinstalled).
+- **include_arm_translation**: bundle the ARM64 translation layer (x86_64
+  hosts only — the layer is x86-hosted).
+
+Full LineageOS source builds (~300 GB disk, ~5 h) cannot run on
+GitHub-hosted runners; the workflow therefore packages the upstream-published
+images, validating their SHA-256 against the official channel manifest (or
+computing and recording the checksums for community images). See
+[docs/LICENSING.md](docs/LICENSING.md) for the licensing and liability
+review of every bundled component.
+
+### Using a release package
+
+1. Download the latest `waydroid-*.tar.xz` from the
+   [Releases](https://github.com/IamAzmathullaShaikh/waydroid/releases) page
+   and verify its checksum against the release notes:
+
+   ```sh
+   echo "<sha256>  waydroid-*.tar.xz" | sha256sum -c -
+   ```
+
+2. Extract and install (root required):
+
+   ```sh
+   tar -xJf waydroid-*.tar.xz
+   cd waydroid-*/
+   sudo ./install.sh
+   ```
+
+   This installs the tooling to `/usr`, the images to
+   `/usr/share/waydroid-extra/images`, and (if bundled) the ARM translation
+   layer to `/var/lib/waydroid/arm-translation`.
+
+3. Initialize with the preinstalled images — no download needed:
+
+   ```sh
+   sudo waydroid init -i /usr/share/waydroid-extra/images
+   ```
+
+4. Start the session:
+
+   ```sh
+   waydroid session start
+   ```
+
+5. (Optional) Verify the ARM translation layer is active on x86_64:
+
+   ```sh
+   waydroid arm-translation status
+   ```
+
+   If you installed a `GAPPS` image, log in to the Play Store on first boot.
+
 ## schedtune cgroup handling
 
 `schedtune` is a cgroup controller used by Android for CPU-boost tuning. On

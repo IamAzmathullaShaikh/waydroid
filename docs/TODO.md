@@ -40,6 +40,31 @@ and the live verification session (2026-08-14, x86_64 host running the fork
   integrity check, overlay sync, exec-bit preservation, ABI prop
   advertising. Suite: **113 passed, 1 skipped**, ruff clean.
 
+### Release packages (new)
+
+- **`tools/release/package.py`** — builds a self-contained release package
+  (tooling install tree + latest Android images + optional ARM64
+  translation layer) with `install.sh`, `SHA256SUMS`, `LICENSE` and
+  `NOTICE`.
+- **Channel selection** — `official` (latest validated ota.waydro.id
+  build, sha256-checked against the manifest) or `community-los22` /
+  `community-los23` (latest matching WayDroid-ATV build; checksums
+  computed and recorded since upstream publishes none). Verified live
+  against both endpoints.
+- **GitHub Actions** — `build-release.yaml`: weekly + manual dispatch
+  (channel/arch/system_type/arm-translation/version inputs), runs
+  `make check`, stages `make install DESTDIR`, builds the package,
+  publishes it as a GitHub Release asset. Full LOS source builds (~300 GB,
+  ~5 h) can't run on hosted runners, so it packages upstream images.
+- **Licensing review** — `docs/LICENSING.md`: project GPL-3.0-or-later,
+  debian BSD-3-clause, metainfo CC0/GPL, images LineageOS (Apache-2.0 /
+  GPL-2.0 kernel), and the key finding: the `supremegamers` translation
+  prebuilt declares NOASSERTION — mitigation: optional bundling + explicit
+  NOTICE provenance + no-warranty statement.
+- Tests: channel parsing (official/community/combined), sha256 integrity,
+  image extraction, tarball layout, exec-bit checksums. Suite now
+  **128 passed, 1 skipped**, ruff clean.
+
 ### Earlier batch (still in the tree)
 
 - ServiceRunner + dispatch-derived root/init guards; `@BINDIR@` PREFIX
@@ -89,6 +114,8 @@ and the live verification session (2026-08-14, x86_64 host running the fork
 
 ### 4. Housekeeping
 
+- [ ] Run the release workflow once on GitHub (dispatch) and sanity-check
+      the produced package on a clean host before pointing users at it.
 - [ ] Remove the leftover test APKs under `/tmp/armonly/` and `/tmp/armapp/`
       and the `armonly`/`armapp` packages from the running container
       (`adb uninstall`).
