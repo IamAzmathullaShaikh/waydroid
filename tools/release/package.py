@@ -30,17 +30,10 @@ import logging
 import os
 import shutil
 import socket
-import sys
 import tarfile
 import tempfile
 import urllib.request
 import zipfile
-
-# Allow running as a plain script from anywhere in the repo.
-sys.path.insert(0, os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-from tools.helpers import arm_translation  # noqa: E402
 
 log = logging.getLogger("waydroid.release")
 
@@ -52,6 +45,15 @@ COMMUNITY_REPO = "WayDroid-ATV/waydroid-builds"
 COMMUNITY_RELEASES_API = ("https://api.github.com/repos/"
                           + COMMUNITY_REPO + "/releases?per_page=10")
 COMMUNITY_ANDROID_MAJOR = {"community-los22": 22, "community-los23": 23}
+
+# Default source of prebuilt ARM64 translation artifacts, mirroring
+# tools/helpers/arm_translation.py. Kept local (rather than importing the
+# module) so this script runs on a bare CI runner without waydroid's
+# runtime dependencies (dbus, PyGObject, gbinder). md5-verified below.
+DEFAULT_ARCHIVE_URL = ("https://github.com/supremegamers/"
+                       "vendor_google_proprietary_ndk_translation-prebuilt/"
+                       "archive/68734c52556d3d7a6db34c603dd9276915c29f2f.zip")
+DEFAULT_ARCHIVE_MD5 = "0b2207c490fcb400aa5c87fcf0d52d38"
 
 DEFAULT_TIMEOUT = 60  # seconds per socket read
 
@@ -456,17 +458,17 @@ def _prepare_arm_translation(work):
     archive = os.path.join(work, "arm-translation.zip")
     log.info("Downloading ARM translation layer")
     socket.setdefaulttimeout(DEFAULT_TIMEOUT)
-    req = urllib.request.Request(arm_translation.DEFAULT_ARCHIVE_URL,
+    req = urllib.request.Request(DEFAULT_ARCHIVE_URL,
                                  headers={"User-Agent":
                                           "waydroid-release-package"})
     with urllib.request.urlopen(req) as response, open(archive, "wb") as out:
         shutil.copyfileobj(response, out, 1 << 20)
     actual_md5 = md5(archive)
-    if actual_md5 != arm_translation.DEFAULT_ARCHIVE_MD5:
+    if actual_md5 != DEFAULT_ARCHIVE_MD5:
         os.remove(archive)
         raise ValueError(
             f"MD5 mismatch for translation archive: expected "
-            f"{arm_translation.DEFAULT_ARCHIVE_MD5}, got {actual_md5}")
+            f"{DEFAULT_ARCHIVE_MD5}, got {actual_md5}")
     extract_dir = os.path.join(work, "arm-extract")
     os.makedirs(extract_dir)
     with zipfile.ZipFile(archive) as handle:
