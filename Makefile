@@ -49,14 +49,14 @@ install:
 	cp dbus/id.waydro.Container.policy $(INSTALL_POLKIT_DIR)/actions/
 	if [ $(USE_DBUS_ACTIVATION) = 1 ]; then \
 		install -d $(INSTALL_DBUS_DIR)/system-services; \
-		cp dbus/id.waydro.Container.service $(INSTALL_DBUS_DIR)/system-services/; \
+		sed 's|@BINDIR@|$(BIN_DIR)|g' dbus/id.waydro.Container.service > $(INSTALL_DBUS_DIR)/system-services/id.waydro.Container.service; \
 	fi
 	if [ $(USE_SYSTEMD) = 1 ]; then \
 		install -d $(INSTALL_SYSD_DIR); \
-		cp systemd/waydroid-container.service $(INSTALL_SYSD_DIR); \
+		sed 's|@BINDIR@|$(BIN_DIR)|g' systemd/waydroid-container.service > $(INSTALL_SYSD_DIR)/waydroid-container.service; \
 	fi
 	if [ $(USE_NFTABLES) = 1 ]; then \
-		sed '/LXC_USE_NFT=/ s/false/true/' -i $(INSTALL_WAYDROID_DIR)/data/scripts/waydroid-net.sh; \
+		sed 's/^LXC_USE_NFT=.*/LXC_USE_NFT="true"/' -i $(INSTALL_WAYDROID_DIR)/data/scripts/waydroid-net.sh; \
 	fi
 
 install_apparmor:

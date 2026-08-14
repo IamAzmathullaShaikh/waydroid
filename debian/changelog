@@ -1,3 +1,21 @@
+waydroid (1.6.4) bullseye; urgency=medium
+
+  * tools: Add ServiceRunner and dispatch table, harden set_permissions
+  * tools: Derive root/init guards from the dispatch table
+  * config: Compute session defaults at session start, fix upgrade images path
+  * container: Extract networking/sensors into helpers, add make check
+  * tools: Fix -l/--log flag, binder config fallbacks, sensord teardown
+  * container: Fix binder settings transaction, harden container control
+  * container: Retry schedtune lazy unmount before warning
+  * net: Auto-detect nftables when no iptables tooling is installed
+  * drivers: Persist binder node names on upgrade
+  * initializer: Harden Halium vendor-type detection
+  * Makefile: Substitute prefix into systemd/dbus activation files
+  * Add pytest test suite and CI job
+  * arm-translation: Add libndk_translation support for ARM apps on x86_64
+
+ -- IAmAzmathullaShaikh <iamshaikhazmathulla@gmail.com>  Fri, 14 Aug 2026 12:00:00 +0530
+
 waydroid (1.6.3) bullseye; urgency=medium
 
   * tools: Fix all occurrences of unused variable warning

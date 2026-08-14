@@ -17,10 +17,15 @@ def get_config(args):
 
 def migration(args):
     try:
-        old_ver = tools.helpers.props.file_get(args, args.work + "/waydroid_base.prop", "waydroid.tools_version")
+        old_ver = tools.helpers.props.file_get(
+            args, args.work + "/waydroid_base.prop", "waydroid.tools_version")
         if versiontuple(old_ver) <= versiontuple("1.3.4"):
-            chmod_paths = ["cache_http", "host-permissions", "lxc", "images", "rootfs", "data", "waydroid_base.prop", "waydroid.prop", "waydroid.cfg"]
-            tools.helpers.run.user(args, ["chmod", "-R", "g-w,o-w"] + [os.path.join(args.work, f) for f in chmod_paths], check=False)
+            chmod_paths = ["cache_http", "host-permissions", "lxc", "images",
+                           "rootfs", "data", "waydroid_base.prop", "waydroid.prop",
+                           "waydroid.cfg"]
+            tools.helpers.run.user(
+                args, ["chmod", "-R", "g-w,o-w"] +
+                [os.path.join(args.work, f) for f in chmod_paths], check=False)
             tools.helpers.run.user(args, ["chmod", "g-w,o-w", args.work], check=False)
             os.remove(os.path.join(args.work, "session.cfg"))
         if versiontuple(old_ver) <= versiontuple("1.6.0"):
@@ -28,6 +33,21 @@ def migration(args):
             cfg = tools.config.load(args)
             cfg["waydroid"]["auto_adb"] = "False"
             tools.config.save(args, cfg)
+        if versiontuple(old_ver) <= versiontuple("1.6.3"):
+            # Persist the binder node names that were introduced in 1.6.x so
+            # package upgrades don't rely on the runtime fallback in
+            # drivers.loadBinderNodes on every boot.
+            cfg = tools.config.load(args)
+            waydroid_cfg = cfg["waydroid"]
+            defaults = {"binder": "binder", "vndbinder": "vndbinder",
+                        "hwbinder": "hwbinder"}
+            changed = False
+            for key, value in defaults.items():
+                if key not in waydroid_cfg:
+                    waydroid_cfg[key] = value
+                    changed = True
+            if changed:
+                tools.config.save(args, cfg)
     except Exception as e:
         logging.debug("Error during migration: %s", e)
 
@@ -51,7 +71,9 @@ def upgrade(args):
         if args.images_path not in tools.config.defaults["preinstalled_images_paths"]:
             helpers.images.get(args)
         else:
-            logging.info("Upgrade refused because Waydroid was configured to load pre-installed image from {}.".format(args.images_path))
+            logging.info(
+                "Upgrade refused because Waydroid was configured to load "
+                "pre-installed image from {}.".format(args.images_path))
     helpers.drivers.probeAshmemDriver(args)
     helpers.lxc.setup_host_perms(args)
     helpers.lxc.set_lxc_config(args)

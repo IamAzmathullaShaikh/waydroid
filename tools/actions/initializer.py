@@ -8,9 +8,6 @@ import stat
 import sys
 import threading
 import multiprocessing
-import select
-import queue
-import time
 import dbus
 import dbus.service
 import argparse
@@ -187,7 +184,9 @@ class DbusInitializer(dbus.service.Object):
         dbus.service.Object.__init__(self, bus, object_path)
 
     @helpers.logging.log_exceptions
-    @dbus.service.method("id.waydro.Initializer", in_signature='a{ss}', out_signature='', sender_keyword="sender", connection_keyword="conn")
+    @dbus.service.method("id.waydro.Initializer", in_signature='a{ss}',
+                         out_signature='', sender_keyword="sender",
+                         connection_keyword="conn")
     def Init(self, params, sender=None, conn=None):
         if self.worker_thread is not None:
             self.worker_thread.kill()
@@ -221,9 +220,14 @@ class DbusInitializer(dbus.service.Object):
         pass
 
 def ensure_polkit_auth(sender, conn, privilege):
-    dbus_info = dbus.Interface(conn.get_object("org.freedesktop.DBus", "/org/freedesktop/DBus/Bus", False), "org.freedesktop.DBus")
+    dbus_info = dbus.Interface(
+        conn.get_object("org.freedesktop.DBus", "/org/freedesktop/DBus/Bus", False),
+        "org.freedesktop.DBus")
     pid = dbus_info.GetConnectionUnixProcessID(sender)
-    polkit = dbus.Interface(dbus.SystemBus().get_object("org.freedesktop.PolicyKit1", "/org/freedesktop/PolicyKit1/Authority", False), "org.freedesktop.PolicyKit1.Authority")
+    polkit = dbus.Interface(
+        dbus.SystemBus().get_object("org.freedesktop.PolicyKit1",
+                                    "/org/freedesktop/PolicyKit1/Authority", False),
+        "org.freedesktop.PolicyKit1.Authority")
     try:
         (is_auth, _, _) = polkit.CheckAuthorization(
             ("unix-process", {

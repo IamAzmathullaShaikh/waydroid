@@ -25,12 +25,17 @@ LXC_DHCP_MAX="253"
 LXC_DHCP_CONFILE=""
 LXC_DHCP_PING="true"
 LXC_DOMAIN=""
-LXC_USE_NFT="false"
+# Network backend: "true" (nftables), "false" (iptables), or "auto"
+# (nftables only when no iptables tooling is installed). The Makefile's
+# USE_NFTABLES=1 flips this line to "true" at install time.
+LXC_USE_NFT="${LXC_USE_NFT:-auto}"
 
-LXC_IPV6_ADDR=""
-LXC_IPV6_MASK=""
-LXC_IPV6_NETWORK=""
-LXC_IPV6_NAT="false"
+# IPv6 NAT is off by default; set LXC_IPV6_ADDR/MASK/NETWORK and
+# LXC_IPV6_NAT=true (in the environment or the config) to enable it.
+LXC_IPV6_ADDR="${LXC_IPV6_ADDR:-}"
+LXC_IPV6_MASK="${LXC_IPV6_MASK:-}"
+LXC_IPV6_NETWORK="${LXC_IPV6_NETWORK:-}"
+LXC_IPV6_NAT="${LXC_IPV6_NAT:-false}"
 
 IPTABLES_BIN="$(command -v iptables-legacy)"
 if [ ! -n "$IPTABLES_BIN" ]; then
@@ -42,7 +47,13 @@ if [ ! -n "$IP6TABLES_BIN" ]; then
 fi
 
 use_nft() {
-    [ -n "$NFT" ] && nft list ruleset > /dev/null 2>&1 && [ "$LXC_USE_NFT" = "true" ]
+    [ -n "$NFT" ] || return 1
+    nft list ruleset > /dev/null 2>&1 || return 1
+    if [ "$LXC_USE_NFT" = "true" ]; then
+        return 0
+    fi
+    # "auto": fall back to nftables only when no iptables tooling exists
+    [ "$LXC_USE_NFT" = "auto" ] && [ -z "$IPTABLES_BIN" ]
 }
 
 NFT="$(command -v nft)"

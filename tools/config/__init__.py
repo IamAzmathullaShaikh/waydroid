@@ -9,10 +9,12 @@ import pwd
 from tools.config.load import load, load_channels
 from tools.config.save import save
 
+__all__ = ["load", "load_channels", "save"]
+
 #
 # Exported variables (internal configuration)
 #
-version = "1.6.3"
+version = "1.6.4"
 tools_src = os.path.normpath(os.path.realpath(__file__) + "/../../..")
 
 # Keys saved in the config file (mostly what we ask in 'waydroid init')
@@ -25,9 +27,7 @@ config_keys = ["arch",
                "mount_overlays",
                "auto_adb"]
 
-# Config file/commandline default values
-# $WORK gets replaced with the actual value for args.work (which may be
-# overridden on the commandline)
+# Config file default values
 defaults = {
     "arch": "arm64",
     "work": "/var/lib/waydroid",
