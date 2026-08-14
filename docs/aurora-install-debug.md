@@ -73,14 +73,16 @@ install *and* run:
 ```bash
 # needs root (the container D-Bus service runs as root; user-side commands don't)
 sudo make install                                 # install the fork over /usr/lib/waydroid
-sudo waydroid arm-translation install --source /path/to/libndk-artifacts
+sudo waydroid arm-translation install             # fetches a known-good prebuilt (md5-verified)
 sudo waydroid container restart
 waydroid app install <arm-only.apk>               # now succeeds
 ```
 
-Artifacts: `system/lib64/libndk_translation.so`, `system/lib64/libndk_translation_proxy.so`,
-`system/lib64/ndk_translation/libarm64.so` (Apache-2.0). Community sources: ChromeOS
-"guybrush" firmware images or Android-x86 images (what `waydroid_script` uses).
+Artifacts: the prebuilt mirrors the container's `/system` layout (at least
+`system/lib64/libndk_translation.so`, `system/lib64/arm64/libc.so` and
+`system/etc/init/ndk_translation.rc`, Apache-2.0). `--source`/`--archive`/`--url`
+accept your own sets; community sources are ChromeOS "guybrush" firmware images or
+Android-x86 images (what `waydroid_script` uses).
 
 ## Workarounds until the translation layer is installed
 

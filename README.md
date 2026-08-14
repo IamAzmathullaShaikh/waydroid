@@ -85,23 +85,28 @@ container has no network even though the session and container are running.
 
 On x86_64 hosts the image is x86_64, but many apps ship ARM-only binaries.
 Waydroid supports Google's [libndk_translation](https://github.com/google-ndk-translation)
-native bridge for those (Apache-2.0, same translator ChromeOS uses):
+native bridge for those (Apache-2.0, the same translator ChromeOS uses):
 
 ```
-waydroid arm-translation install --source /path/to/artifacts
+waydroid arm-translation install
+# or: waydroid arm-translation install --source /path/to/artifacts
 # or: waydroid arm-translation install --archive libndk.tar.xz
 # or: waydroid arm-translation install --url https://example.org/libndk.tar.xz
 waydroid arm-translation status
 ```
 
-The artifacts must mirror the container's `/system` layout
-(`system/lib64/libndk_translation.so`, `system/lib64/libndk_translation_proxy.so`
-and `system/lib64/ndk_translation/libarm64.so`; see
-`tools/helpers/arm_translation.py`). Prebuilt sets are commonly extracted from
-ChromeOS "guybrush" firmware images (what
-[waydroid_script](https://github.com/casualsnek/waydroid_script) uses) or from
-Android-x86 images that ship the translator. After installing, restart the
-container (`waydroid container restart`); remove it with
+With no arguments, `install` fetches a known-good prebuilt set (Android 13,
+md5-verified) from the same source [waydroid_script](https://github.com/casualsnek/waydroid_script)
+consumes; `--source`/`--archive`/`--url` accept your own artifacts. The
+artifacts must mirror the container's `/system` layout (at least
+`system/lib64/libndk_translation.so`, `system/lib64/arm64/libc.so` and
+`system/etc/init/ndk_translation.rc`; see
+`tools/helpers/arm_translation.py` for the full tree). They are synced into
+the container's `/system` overlay at session start, before the overlay is
+mounted, and `make_base_props` advertises the emulated ABIs
+(`arm64-v8a,armeabi-v7a,armeabi`) so both the local PackageManager and
+Google Play's delivery check accept ARM-only apps. After installing, restart
+the container (`waydroid container restart`); remove it with
 `waydroid arm-translation uninstall`.
 
 ## schedtune cgroup handling

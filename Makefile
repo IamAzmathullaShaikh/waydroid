@@ -46,6 +46,8 @@ install:
 	install -d $(INSTALL_APPS_DIR) $(INSTALL_METAINFO_DIR) $(INSTALL_ICONS_DIR)/hicolor/512x512/apps
 	install -d $(INSTALL_APPS_DIRECTORY_DIR) $(INSTALL_APPS_MENU_DIR)
 	cp -a data tools waydroid.py $(INSTALL_WAYDROID_DIR)
+	# Never ship bytecode caches from the working tree
+	find $(INSTALL_WAYDROID_DIR) -type d -name __pycache__ -exec rm -rf {} +
 	ln -sf \
 		$$(realpath --relative-to=$(INSTALL_BIN_DIR) $(INSTALL_WAYDROID_DIR)/waydroid.py) \
 		$(INSTALL_BIN_DIR)/waydroid
