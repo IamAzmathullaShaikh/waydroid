@@ -143,8 +143,8 @@ def foreground_pipe(args, cmd, working_dir=None, output_to_stdout=False,
     :param output_to_stdout: copy all output to waydroid's stdout
     :param output_return: return the output of the whole program
     :param output_timeout: kill the process when it doesn't print any output
-                           after a certain time (configured with --timeout)
-                           and raise a RuntimeError exception
+                           after args.timeout seconds and raise a
+                           RuntimeError exception
     :param sudo: use sudo to kill the process when it hits the timeout
     :returns: (code, output)
               * code: return code of the program
@@ -177,8 +177,6 @@ def foreground_pipe(args, cmd, working_dir=None, output_to_stdout=False,
             if wait_end - wait_start >= args.timeout:
                 logging.info("Process did not write any output for " +
                              str(args.timeout) + " seconds. Killing it.")
-                logging.info("NOTE: The timeout can be increased with"
-                             " 'waydroid -t'.")
                 kill_command(args, process.pid, sudo)
                 continue
 
@@ -215,8 +213,8 @@ def check_return_code(args, code, log_message):
 
     :param code: exit code to check
     :param log_message: simplified and more readable form of the command, e.g.
-                        "(native) % echo test" instead of the full command with
-                        entering the chroot and more escaping
+                        "(native) % echo test" instead of the full command
+                        with its escaping
     :raises RuntimeError: when the code indicates that the command failed
     """
 
@@ -258,12 +256,11 @@ def core(args, log_message, cmd, working_dir=None, output="log",
     Run a command and create a log entry.
 
     This is a low level function not meant to be used directly. Use one of the
-    following instead: tools.helpers.run.user(), tools.helpers.run.root(),
-                       tools.chroot.user(), tools.chroot.root()
+    following instead: tools.helpers.run.user(), tools.helpers.run.root()
 
     :param log_message: simplified and more readable form of the command, e.g.
-                        "(native) % echo test" instead of the full command with
-                        entering the chroot and more escaping
+                        "(native) % echo test" instead of the full command
+                        with its escaping
     :param cmd: command as list, e.g. ["echo", "string with spaces"]
     :param working_dir: path in host system where the command should run
     :param output: where to write the output (stdout and stderr) of the
@@ -280,8 +277,8 @@ def core(args, log_message, cmd, working_dir=None, output="log",
 
                    When the output is not set to "interactive", "tui",
                    "background" or "pipe", we kill the process if it does not
-                   output anything for 5 minutes (time can be set with
-                   "waydroid --timeout").
+                   output anything for args.timeout seconds (default: 30
+                   minutes, set in tools.prep_args).
 
                    The table below shows all possible values along with
                    their properties. "wait" indicates that we wait for the

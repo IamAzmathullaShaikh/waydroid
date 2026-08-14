@@ -11,11 +11,9 @@ import tools.config
 
 """ This file is about parsing command line arguments passed to waydroid, as
     well as generating the help pages (waydroid -h). All this is done with
-    Python's argparse. The parsed arguments get extended and finally stored in
-    the "args" variable, which is prominently passed to most functions all
-    over the waydroid code base.
-
-    See tools/helpers/args.py for more information about the args variable. """
+    Python's argparse. The parsed arguments get extended in tools/__init__.py
+    (see prep_args) and finally stored in the "args" variable, which is
+    prominently passed to most functions all over the waydroid code base. """
 
 def arguments_init(subparser):
     ret = subparser.add_parser("init", help="set up waydroid specific"
@@ -106,17 +104,34 @@ def arguments_fullUI(subparser):
     return ret
 
 def arguments_firstLaunch(subparser):
-    ret = subparser.add_parser("first-launch", help="start waydroid, prompting to initialize waydroid first if necessary (default)")
+    ret = subparser.add_parser(
+        "first-launch",
+        help="start waydroid, prompting to initialize waydroid first if necessary (default)")
     return ret
 
 def arguments_shell(subparser):
     ret = subparser.add_parser("shell", help="run remote shell command")
     ret.add_argument("-u", "--uid", help="the UID to run as (also sets GID to the same value if -g is not set)")
     ret.add_argument("-g", "--gid", help="the GID to run as")
-    ret.add_argument("-s", "--context", help="transition to the specified SELinux or AppArmor security context. No-op if -L is supplied.")
-    ret.add_argument("-L", "--nolsm", action="store_true", help="tell LXC not to perform security domain transition related to mandatory access control (e.g. SELinux, AppArmor). If this option is supplied, LXC won't apply a container-wide seccomp filter to the executed program. This is a dangerous option that can result in leaking privileges to the container!!!")
-    ret.add_argument("-C", "--allcaps", action="store_true", help="tell LXC not to drop capabilities. This is a dangerous option that can result in leaking privileges to the container!!!")
-    ret.add_argument("-G", "--nocgroup", action="store_true", help="tell LXC not to switch to the container cgroup. This is a dangerous option that can result in leaking privileges to the container!!!")
+    ret.add_argument(
+        "-s", "--context",
+        help="transition to the specified SELinux or AppArmor security context. "
+             "No-op if -L is supplied.")
+    ret.add_argument(
+        "-L", "--nolsm", action="store_true",
+        help="tell LXC not to perform security domain transition related to mandatory "
+             "access control (e.g. SELinux, AppArmor). If this option is supplied, LXC "
+             "won't apply a container-wide seccomp filter to the executed program. "
+             "This is a dangerous option that can result in leaking privileges to the "
+             "container!!!")
+    ret.add_argument(
+        "-C", "--allcaps", action="store_true",
+        help="tell LXC not to drop capabilities. This is a dangerous option that can "
+             "result in leaking privileges to the container!!!")
+    ret.add_argument(
+        "-G", "--nocgroup", action="store_true",
+        help="tell LXC not to switch to the container cgroup. This is a dangerous "
+             "option that can result in leaking privileges to the container!!!")
     ret.add_argument('COMMAND', nargs='*', help="command to run")
     return ret
 
@@ -134,6 +149,24 @@ def arguments_adb(subparser):
 
 def arguments_bugreport(subparser):
     ret = subparser.add_parser("bugreport", help="create a bugreport archive interactively")
+    return ret
+
+def arguments_arm_translation(subparser):
+    ret = subparser.add_parser(
+        "arm-translation",
+        help="manage the ARM64 translation layer (libndk_translation) "
+             "for running ARM apps on x86_64 hosts")
+    sub = ret.add_subparsers(title="subaction", dest="subaction")
+    install = sub.add_parser("install",
+                             help="install the ARM translation layer")
+    install.add_argument("--source",
+                         help="directory with the artifacts (system/... layout)")
+    install.add_argument("--archive",
+                         help="path to a .tar/.tar.gz/.tar.xz/.zip archive")
+    install.add_argument("--url",
+                         help="URL of an archive to download")
+    sub.add_parser("status", help="show the ARM translation state")
+    sub.add_parser("uninstall", help="remove the ARM translation layer")
     return ret
 
 def arguments():
@@ -173,6 +206,7 @@ def arguments():
     arguments_logcat(sub)
     arguments_adb(sub)
     arguments_bugreport(sub)
+    arguments_arm_translation(sub)
 
     if argcomplete:
         argcomplete.autocomplete(parser, always_complete_options="long")

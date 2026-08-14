@@ -16,8 +16,8 @@ select = [
 	"W",
 	"F",
 ]
-ignore = [
-	"E501", # Do not enforce line length limit for now.
-	"F401", # TODO: Remove this once unused imports are removed.
-	"F811", # TODO: Remove this once redefined variables are refactored.
-]
+ignore = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

@@ -168,9 +168,10 @@ def setupBinderNodes(args):
 
 def loadBinderNodes(args):
     cfg = tools.config.load(args)
-    args.BINDER_DRIVER = cfg["waydroid"]["binder"]
-    args.VNDBINDER_DRIVER = cfg["waydroid"]["vndbinder"]
-    args.HWBINDER_DRIVER = cfg["waydroid"]["hwbinder"]
-    # These might not be in cfg on package upgrade
+    # The binder node names and the protocol versions might not be in the
+    # config on package upgrade, so fall back to the standard names.
+    args.BINDER_DRIVER = cfg["waydroid"].get("binder", "binder")
+    args.VNDBINDER_DRIVER = cfg["waydroid"].get("vndbinder", "vndbinder")
+    args.HWBINDER_DRIVER = cfg["waydroid"].get("hwbinder", "hwbinder")
     args.BINDER_PROTOCOL = cfg["waydroid"].get("binder_protocol")
     args.SERVICE_MANAGER_PROTOCOL = cfg["waydroid"].get("service_manager_protocol")

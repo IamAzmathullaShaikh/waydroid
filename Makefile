@@ -32,6 +32,15 @@ INSTALL_APPARMOR_DIR := $(DESTDIR)$(APPARMOR_DIR)
 build:
 	@echo "Nothing to build, run 'make install' to copy the files!"
 
+# Run the same checks as CI: lint (ruff) and the test suite (pytest).
+# Override PYTHON to use a specific interpreter, e.g. a venv:
+#   make check PYTHON=/path/to/venv/bin/python
+PYTHON ?= python3
+
+check:
+	ruff check .
+	$(PYTHON) -m pytest -q
+
 install:
 	install -d $(INSTALL_WAYDROID_DIR) $(INSTALL_BIN_DIR) $(INSTALL_DBUS_DIR)/system.d $(INSTALL_POLKIT_DIR)/actions
 	install -d $(INSTALL_APPS_DIR) $(INSTALL_METAINFO_DIR) $(INSTALL_ICONS_DIR)/hicolor/512x512/apps
@@ -49,14 +58,14 @@ install:
 	cp dbus/id.waydro.Container.policy $(INSTALL_POLKIT_DIR)/actions/
 	if [ $(USE_DBUS_ACTIVATION) = 1 ]; then \
 		install -d $(INSTALL_DBUS_DIR)/system-services; \
-		cp dbus/id.waydro.Container.service $(INSTALL_DBUS_DIR)/system-services/; \
+		sed 's|@BINDIR@|$(BIN_DIR)|g' dbus/id.waydro.Container.service > $(INSTALL_DBUS_DIR)/system-services/id.waydro.Container.service; \
 	fi
 	if [ $(USE_SYSTEMD) = 1 ]; then \
 		install -d $(INSTALL_SYSD_DIR); \
-		cp systemd/waydroid-container.service $(INSTALL_SYSD_DIR); \
+		sed 's|@BINDIR@|$(BIN_DIR)|g' systemd/waydroid-container.service > $(INSTALL_SYSD_DIR)/waydroid-container.service; \
 	fi
 	if [ $(USE_NFTABLES) = 1 ]; then \
-		sed '/LXC_USE_NFT=/ s/false/true/' -i $(INSTALL_WAYDROID_DIR)/data/scripts/waydroid-net.sh; \
+		sed 's/^LXC_USE_NFT=.*/LXC_USE_NFT="true"/' -i $(INSTALL_WAYDROID_DIR)/data/scripts/waydroid-net.sh; \
 	fi
 
 install_apparmor:

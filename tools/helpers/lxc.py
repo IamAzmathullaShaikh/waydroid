@@ -170,7 +170,10 @@ def set_lxc_config(args):
     command = ["cp", "-fpr", seccomp_profile, lxc_path + "/waydroid.seccomp"]
     tools.helpers.run.user(args, command)
     if get_apparmor_status(args):
-        command = ["sed", "-i", "-E", "/lxc.aa_profile|lxc.apparmor.profile/ s/unconfined/{}/g".format(LXC_APPARMOR_PROFILE), lxc_path + "/config"]
+        command = ["sed", "-i", "-E",
+                   "/lxc.aa_profile|lxc.apparmor.profile/ s/unconfined/{}/g".format(
+                       LXC_APPARMOR_PROFILE),
+                   lxc_path + "/config"]
         tools.helpers.run.user(args, command)
 
     nodes = generate_nodes_lxc_config(args)
@@ -200,7 +203,9 @@ def generate_session_lxc_config(args, session):
         raise OSError("Failed to create XDG_RUNTIME_DIR mount point")
 
     wayland_host_socket = os.path.realpath(os.path.join(session["xdg_runtime_dir"], session["wayland_display"]))
-    wayland_container_socket = os.path.realpath(os.path.join(tools.config.defaults["container_xdg_runtime_dir"], tools.config.defaults["container_wayland_display"]))
+    wayland_container_socket = os.path.realpath(os.path.join(
+        tools.config.defaults["container_xdg_runtime_dir"],
+        tools.config.defaults["container_wayland_display"]))
     if not make_entry(wayland_host_socket, wayland_container_socket[1:]):
         raise OSError("Failed to bind Wayland socket")
 
@@ -211,6 +216,14 @@ def generate_session_lxc_config(args, session):
 
     if not make_entry(session["waydroid_data"], "data", options="rbind 0 0"):
         raise OSError("Failed to bind userdata")
+
+    # ARM64 translation layer (x86_64 hosts): bind the installed
+    # libndk_translation artifacts into the container's /system so Android's
+    # native bridge can load them. No-ops when nothing is installed.
+    for host_path, container_path, kind in \
+            tools.helpers.arm_translation.mount_entries():
+        make_entry(host_path, container_path,
+                   options="bind,create={},optional 0 0".format(kind))
 
     lxc_path = tools.config.defaults["lxc"] + "/waydroid"
     config_nodes_tmp_path = args.work + "/config_session"
@@ -357,6 +370,12 @@ def make_base_props(args):
     if prop_fp != "":
         props.append("ro.build.fingerprint=" + prop_fp)
 
+    # On x86_64 hosts with the ARM translation layer installed, tell Android
+    # to use the native bridge so ARM-only apps can run. The [properties]
+    # section below can still override this if needed.
+    if tools.helpers.arm_translation.is_installed():
+        props.append("ro.dalvik.vm.native.bridge=libndk_translation.so")
+
     # now append/override with values in [properties] section of waydroid.cfg
     cfg = tools.config.load(args)
     for k, v in cfg["properties"].items():
@@ -441,7 +460,9 @@ def unfreeze(args):
     tools.helpers.run.user(args, command)
 
 ANDROID_ENV = {
-    "PATH": "/product/bin:/apex/com.android.runtime/bin:/apex/com.android.art/bin:/system_ext/bin:/system/bin:/system/xbin:/odm/bin:/vendor/bin:/vendor/xbin",
+    "PATH": ("/product/bin:/apex/com.android.runtime/bin:/apex/com.android.art/bin:"
+             "/system_ext/bin:/system/bin:/system/xbin:/odm/bin:/vendor/bin:"
+             "/vendor/xbin"),
     "ANDROID_ROOT": "/system",
     "ANDROID_DATA": "/data",
     "ANDROID_STORAGE": "/storage",
@@ -449,7 +470,26 @@ ANDROID_ENV = {
     "ANDROID_I18N_ROOT": "/apex/com.android.i18n",
     "ANDROID_TZDATA_ROOT": "/apex/com.android.tzdata",
     "ANDROID_RUNTIME_ROOT": "/apex/com.android.runtime",
-    "BOOTCLASSPATH": "/apex/com.android.art/javalib/core-oj.jar:/apex/com.android.art/javalib/core-libart.jar:/apex/com.android.art/javalib/core-icu4j.jar:/apex/com.android.art/javalib/okhttp.jar:/apex/com.android.art/javalib/bouncycastle.jar:/apex/com.android.art/javalib/apache-xml.jar:/system/framework/framework.jar:/system/framework/ext.jar:/system/framework/telephony-common.jar:/system/framework/voip-common.jar:/system/framework/ims-common.jar:/system/framework/framework-atb-backward-compatibility.jar:/apex/com.android.conscrypt/javalib/conscrypt.jar:/apex/com.android.media/javalib/updatable-media.jar:/apex/com.android.mediaprovider/javalib/framework-mediaprovider.jar:/apex/com.android.os.statsd/javalib/framework-statsd.jar:/apex/com.android.permission/javalib/framework-permission.jar:/apex/com.android.sdkext/javalib/framework-sdkextensions.jar:/apex/com.android.wifi/javalib/framework-wifi.jar:/apex/com.android.tethering/javalib/framework-tethering.jar"
+    "BOOTCLASSPATH": ("/apex/com.android.art/javalib/core-oj.jar:"
+                      "/apex/com.android.art/javalib/core-libart.jar:"
+                      "/apex/com.android.art/javalib/core-icu4j.jar:"
+                      "/apex/com.android.art/javalib/okhttp.jar:"
+                      "/apex/com.android.art/javalib/bouncycastle.jar:"
+                      "/apex/com.android.art/javalib/apache-xml.jar:"
+                      "/system/framework/framework.jar:"
+                      "/system/framework/ext.jar:"
+                      "/system/framework/telephony-common.jar:"
+                      "/system/framework/voip-common.jar:"
+                      "/system/framework/ims-common.jar:"
+                      "/system/framework/framework-atb-backward-compatibility.jar:"
+                      "/apex/com.android.conscrypt/javalib/conscrypt.jar:"
+                      "/apex/com.android.media/javalib/updatable-media.jar:"
+                      "/apex/com.android.mediaprovider/javalib/framework-mediaprovider.jar:"
+                      "/apex/com.android.os.statsd/javalib/framework-statsd.jar:"
+                      "/apex/com.android.permission/javalib/framework-permission.jar:"
+                      "/apex/com.android.sdkext/javalib/framework-sdkextensions.jar:"
+                      "/apex/com.android.wifi/javalib/framework-wifi.jar:"
+                      "/apex/com.android.tethering/javalib/framework-tethering.jar")
 }
 
 def android_env_attach_options(args):

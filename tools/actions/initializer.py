@@ -8,9 +8,6 @@ import stat
 import sys
 import threading
 import multiprocessing
-import select
-import queue
-import time
 import dbus
 import dbus.service
 import argparse
@@ -19,22 +16,39 @@ from gi.repository import GLib
 def is_initialized(args):
     return os.path.isfile(args.config) and os.path.isdir(tools.config.defaults["rootfs"])
 
+def _int_or_none(value):
+    """Parse an Android version prop as int, or None if absent/garbage."""
+    try:
+        return int(value)
+    except ValueError:
+        # Non-numeric props (e.g. "29.0") must not crash init; treat them
+        # as absent so detection falls back to the next source or MAINLINE.
+        logging.debug("Ignoring non-numeric Android version prop: %r", value)
+        return None
+
 def get_vendor_type(args):
+    """
+    Detect the vendor type from host props (Halium versions, or MAINLINE).
+
+    Uses ro.vndk.version primarily (vndk 20+ maps to Halium N), falling
+    back to ro.vendor.build.version.sdk for Halium 15+ images that no
+    longer expose ro.vndk.version.
+    """
     vndk_str = helpers.props.host_get(args, "ro.vndk.version")
     vendorapi_str = helpers.props.host_get(args, "ro.vendor.build.version.sdk")
     ret = "MAINLINE"
-    if vndk_str != "":
-        vndk = int(vndk_str)
+    vndk = _int_or_none(vndk_str)
+    if vndk is not None:
         if vndk > 19:
             halium_ver = vndk - 19
             if vndk > 31:
-                halium_ver -= 1 # 12L -> Halium 12
+                halium_ver -= 1  # 12L -> Halium 12
             ret = "HALIUM_" + str(halium_ver)
             if vndk == 32:
                 ret += "L"
-    elif vendorapi_str != "":
-        vendorapi = int(vendorapi_str)
-        if vendorapi > 32:
+    else:
+        vendorapi = _int_or_none(vendorapi_str)
+        if vendorapi is not None and vendorapi > 32:
             halium_ver = vendorapi - 20
             ret = "HALIUM_" + str(halium_ver)
 
@@ -187,7 +201,9 @@ class DbusInitializer(dbus.service.Object):
         dbus.service.Object.__init__(self, bus, object_path)
 
     @helpers.logging.log_exceptions
-    @dbus.service.method("id.waydro.Initializer", in_signature='a{ss}', out_signature='', sender_keyword="sender", connection_keyword="conn")
+    @dbus.service.method("id.waydro.Initializer", in_signature='a{ss}',
+                         out_signature='', sender_keyword="sender",
+                         connection_keyword="conn")
     def Init(self, params, sender=None, conn=None):
         if self.worker_thread is not None:
             self.worker_thread.kill()
@@ -221,9 +237,14 @@ class DbusInitializer(dbus.service.Object):
         pass
 
 def ensure_polkit_auth(sender, conn, privilege):
-    dbus_info = dbus.Interface(conn.get_object("org.freedesktop.DBus", "/org/freedesktop/DBus/Bus", False), "org.freedesktop.DBus")
+    dbus_info = dbus.Interface(
+        conn.get_object("org.freedesktop.DBus", "/org/freedesktop/DBus/Bus", False),
+        "org.freedesktop.DBus")
     pid = dbus_info.GetConnectionUnixProcessID(sender)
-    polkit = dbus.Interface(dbus.SystemBus().get_object("org.freedesktop.PolicyKit1", "/org/freedesktop/PolicyKit1/Authority", False), "org.freedesktop.PolicyKit1.Authority")
+    polkit = dbus.Interface(
+        dbus.SystemBus().get_object("org.freedesktop.PolicyKit1",
+                                    "/org/freedesktop/PolicyKit1/Authority", False),
+        "org.freedesktop.PolicyKit1.Authority")
     try:
         (is_auth, _, _) = polkit.CheckAuthorization(
             ("unix-process", {
