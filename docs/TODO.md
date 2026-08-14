@@ -109,8 +109,9 @@ and the live verification session (2026-08-14, x86_64 host running the fork
       set is PR-worthy for `waydroid/waydroid`; the `--url` default (third-
       party prebuilt) is fork-specific — decide whether to ship it
       upstream gated behind a flag.
-- [ ] `make check` note: still requires `ruff` + `pytest` on PATH (CI
-      installs them); consider a `uvx`-based fallback in the Makefile.
+- [x] `make check` now falls back to `uvx --from ruff/--from pytest`
+      when the tools are missing from PATH (CI still installs them
+      explicitly, which takes precedence).
 
 ### 4. Housekeeping
 

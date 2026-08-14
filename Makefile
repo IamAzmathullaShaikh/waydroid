@@ -35,11 +35,19 @@ build:
 # Run the same checks as CI: lint (ruff) and the test suite (pytest).
 # Override PYTHON to use a specific interpreter, e.g. a venv:
 #   make check PYTHON=/path/to/venv/bin/python
+# Tools are resolved at parse time: a tool found on PATH (or importable
+# in $(PYTHON) for pytest) is used as-is, otherwise uvx fetches it on
+# demand, so `make check` works without ruff/pytest installed. Override
+# RUFF / PYTEST to force a specific invocation.
 PYTHON ?= python3
 
+RUFF ?= $(if $(shell command -v ruff 2>/dev/null),ruff,uvx --from ruff ruff)
+PYTEST ?= $(if $(shell $(PYTHON) -c 'import pytest' 2>/dev/null && echo ok),\
+	$(PYTHON) -m pytest,uvx --from pytest pytest)
+
 check:
-	ruff check .
-	$(PYTHON) -m pytest -q
+	$(RUFF) check .
+	$(PYTEST) -q
 
 install:
 	install -d $(INSTALL_WAYDROID_DIR) $(INSTALL_BIN_DIR) $(INSTALL_DBUS_DIR)/system.d $(INSTALL_POLKIT_DIR)/actions
