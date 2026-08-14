@@ -1,88 +1,100 @@
 # TODO — status
 
-All action items derived from the repository's bugs, patches, and
-implementations have been addressed in the 1.6.4 batch. This page records
-what was done and what remains genuinely open (hardware-dependent
-verification that cannot be done in this repository).
+Action items derived from the repository's bugs, patches, implementations,
+and the live verification session (2026-08-14, x86_64 host running the fork
+1.6.4 with libndk_translation installed).
 
-## Completed in 1.6.4
+## Recently completed
 
-### Bugs
+### ARM64 translation layer (the big one)
 
-- **Activation paths follow `PREFIX`** — `systemd/waydroid-container.service`
-  and `dbus/id.waydro.Container.service` are now `@BINDIR@` templates
-  substituted at install time (`make install PREFIX=/usr/local` works).
-  See `docs/makefile-walkthrough.md`.
-- **schedtune lazy unmount** — `keep_schedtune_if_nestable` now retries the
-  lazy unmount (3 attempts, 1s apart) before warning, and the warning points
-  at the README troubleshooting section.
-- **`enableNFC`/`enableBluetooth`** — the intentional no-ops now log at
-  WARNING level when Android actually toggles them, so the limitation
-  surfaces in `waydroid log` instead of being invisible at debug level.
-- **nftables-only hosts** — `waydroid-net.sh` now defaults `LXC_USE_NFT` to
-  `auto`: nftables when `nft` exists and no iptables tooling is installed;
-  the Makefile's `USE_NFTABLES=1` still forces `"true"`.
-- **IPv6 NAT** — the `LXC_IPV6_*` variables are now read from the
-  environment (were hardcoded empty), enabling per-session IPv6 without
-  editing the script; documented in `docs/host-integration.md`.
-- **Binder config migration** — `upgrader.migration()` persists
-  binder/vndbinder/hwbinder keys for installs older than 1.6.4, so the
-  runtime fallback in `drivers.loadBinderNodes` is no longer needed every
-  boot.
-- **`waydroid log` path selection** — extracted `_log_path()` in
-  `tools/__init__.py` and unit-tested the root-log preference / explicit
-  `-l` precedence.
+- **`waydroid arm-translation`** — install/status/uninstall action,
+  root-gated via the DISPATCH table.
+- **One-command install** — `waydroid arm-translation install` with no
+  flags downloads the known-good community prebuilt
+  (supremegamers/vendor_google_proprietary_ndk_translation-prebuilt,
+  Android 13, 17.8 MB, md5-verified), auto-detects the `prebuilts/` tree,
+  validates, installs. `--source/--archive/--url` still work.
+- **Real artifact layout** — matches the actual prebuilt (`prebuilts/` →
+  `/system` with `lib64/arm64/`, `lib/arm/`, `bin/arm{,64}`, `etc/init/
+  ndk_translation.rc`, `etc/binfmt_misc/`, `etc/{cpuinfo,ld.config}.arm{,
+  64}.txt`) instead of the previously assumed `ndk_translation/` tree that
+  the real artifacts do not contain.
+- **Overlay sync, not bind mounts** — the container's `/system` overlay is
+  mounted read-only, so bind-mounting in failed silently. Artifacts are now
+  copied into the overlay lowerdir (`overlay/system/`) at session start,
+  before `mount_rootfs()` mounts it — the waydroid_script approach.
+- **Exec bits preserved** — zipfile drops unix modes; `_extract_archive`
+  restores them so binfmt_misc can run the translator binaries.
+- **Full native-bridge prop set** — `make_base_props` writes
+  `ro.dalvik.vm.native.bridge`, the emulated `ro.product.cpu.abilist*`
+  (fixes both Play delivery and local `-113`), plus `ro.dalvik.vm.isa.arm{,
+  64}` and `ro.enable.native.bridge.exec` (required by ART and the
+  binfmt_misc registration). `[properties]` in waydroid.cfg still
+  overrides.
+- **Verified live** — ARM-only APK installs (was `INSTALL_FAILED_
+  NO_MATCHING_ABIS`); a test app with a real AArch64 `.so`
+  (`mov w0,#42; ret`) rendered its activity with
+  `ndk_translation: Initialized NDK translation (aarch64)` in logcat.
+- Tests: layout validation, nested `prebuilts/` source, default-URL +
+  integrity check, overlay sync, exec-bit preservation, ABI prop
+  advertising. Suite: **113 passed, 1 skipped**, ruff clean.
 
-### Patches / release
+### Earlier batch (still in the tree)
 
-- **Version 1.6.4** — `tools/config/__init__.py` and a new
-  `debian/changelog` entry.
-- **Upstream triage** — see `docs/upstream.md` (what to send to
-  `waydroid/waydroid`, what stays fork-specific, housekeeping for PRs).
-- **Halium 15+ / gralloc5 drift** — `get_vendor_type` hardened against
-  non-numeric props (was a hard crash on `int()`), the AIDL protocol table
-  was already pinned by tests (`tests/test_protocol.py`); image-dependent
-  behavior is documented as a re-verify item in `docs/upstream.md`.
+- ServiceRunner + dispatch-derived root/init guards; `@BINDIR@` PREFIX
+  substitution; LOS 13→16 (Android 13–16) doc/support update; 1.6.4
+  hardening batch (schedtune retry, NFC/BT warnings, nftables auto-detect,
+  IPv6 env vars, binder config migration, `_log_path`); E501 enforced at
+  131; docs: `makefile-walkthrough.md`, `upstream.md`,
+  `distro-packaging.md`, `aurora-install-debug.md`.
 
-### Implementations — follow-ups
+## Open — needs action
 
-- **ServiceRunner stop ordering** — session stop quits all three service
-  loops plus the main loop; covered by
-  `test_session_stop_quits_all_service_loops`.
-- **Test coverage** — new suites for LXC config generation, mount helpers,
-  net lease parsing, upgrader migration, `get_vendor_type`,
-  `get_session_defaults`, and `_log_path` (92 tests total).
-- **Line length enforced** — `E501` removed from the ruff ignore list; all
-  25 long lines wrapped to ≤131 columns.
-- **`get_session_defaults()` env precedence** — pinned, including the
-  `"None"` string behavior for unset env and the pulse fallback.
-- **`set_permissions` split** — the 0660/0666 vendor-HAL vs app split was
-  already unit-tested; hardware verification remains (below).
-- **Distro prerequisites** — see `docs/distro-packaging.md` (binderfs
-  tmpfiles/fstab, ufw rules, network backend, schedtune).
-- **ARM64 translation layer** — new `waydroid arm-translation` action
-  (install from `--source`/`--archive`/`--url`, status, uninstall) with
-  session LXC bind mounts into the container `/system` and the
-  `ro.dalvik.vm.native.bridge` prop in the generated base props; artifacts
-  follow the container `/system` layout under
-  `/var/lib/waydroid/arm-translation` (see `tools/helpers/arm_translation.py`
-  and the README section).
+### 1. Aurora Store re-check-in verification (in progress)
 
-## Still open (needs hardware / external action)
+- [ ] After `pm clear com.aurora.store`, confirm the fresh anonymous
+      check-in now advertises `arm64-v8a` (read `PREFERENCE_AUTH_DATA`
+      `Platforms` back from the container's Aurora prefs). Requires root;
+      sudo was locked out at the end of the session.
+- [ ] Install a previously-failing real app from Aurora Store end-to-end
+      (delivery no longer `AppNotSupported`, install no longer `-113`).
+- [ ] If still `AppNotSupported`: use Aurora device spoofing (Settings →
+      Apps → ARM64 profile) to force a clean re-check-in, then re-test.
+- [ ] Update `docs/aurora-install-debug.md` with the re-check-in outcome.
 
-1. **schedtune on real Halium/Ubuntu-Touch kernels** — validate the retry
-   and the keep/unmount decision on devices; the manual probe steps are in
-   the README.
-2. **`set_permissions` 0660/0666 split on real binderfs hardware** — confirm
-   no HAL breaks with owner-only access on actual devices.
-3. **Halium 15+ version detection and AIDL gralloc5 detection against
-   current shipped images** — the code is verified against the API levels
-   (protocol table pinned through API 36/Android 16; `get_vendor_type`
-   hardened), but not against actual images. Official OTA images are still
-   Android 13 (upstream issue #2229); community LineageOS 22/23 images are
-   available for manual verification.
-4. **NFC/Bluetooth data plane** — if container NFC/Bluetooth should ever
-   control host hardware, that belongs in a session-scoped
-   hardware-adaptation layer (currently documented no-ops).
-5. **Distro outreach** — landing `docs/distro-packaging.md` content in
-   docs.waydro.id and distro packaging notes.
+### 2. Real-device / community testing (can't be done on this box)
+
+- [ ] Run a real ARM-only app (not the synthetic test APK) on this box
+      under libndk_translation and note any crashes/quirks; feed findings
+      back to the artifact source.
+- [ ] schedtune probe retry + warning — validate on real Halium /
+      Ubuntu-Touch hardware.
+- [ ] Halium 15+ / AIDL gralloc5 detection — validate against actual
+      Halium 15+ devices.
+- [ ] Android 15/16 (LineageOS 22/23) images — when upstream
+      waydroid/waydroid#2229 ships official images, test this fork's
+      runtime detection against them.
+
+### 3. Upstream / release
+
+- [ ] Version-bump to 1.6.5 when the next release batch lands (changelog
+      entry already tracks 1.6.4).
+- [ ] `docs/upstream.md` triage: the arm-translation overlay-sync + prop
+      set is PR-worthy for `waydroid/waydroid`; the `--url` default (third-
+      party prebuilt) is fork-specific — decide whether to ship it
+      upstream gated behind a flag.
+- [ ] `make check` note: still requires `ruff` + `pytest` on PATH (CI
+      installs them); consider a `uvx`-based fallback in the Makefile.
+
+### 4. Housekeeping
+
+- [ ] Remove the leftover test APKs under `/tmp/armonly/` and `/tmp/armapp/`
+      and the `armonly`/`armapp` packages from the running container
+      (`adb uninstall`).
+- [ ] Consider documenting the ARM translation overlay-sync design (why
+      bind mounts can't work into a ro `/system`) in the module docstring
+      — partially done in `arm_translation.py`; extend if needed.
+- [ ] The sudo lockout experienced during verification: if reproducible,
+      worth a note — repeated `sudo -S` with the same password should not
+      lock out; check `pam_tally`/`faillock` config on this box.
