@@ -330,11 +330,16 @@ Attribution is provided as required by their licenses.
 """
 
 
-def write_checksums(manifest_path, files):
-    """Write a SHA256SUMS file for the given absolute paths."""
+def write_checksums(manifest_path, root, files):
+    """Write a SHA256SUMS file for the given absolute paths.
+
+    Entries are recorded relative to ``root`` (the package staging dir), so
+    ``sha256sum -c SHA256SUMS`` works from the extracted package root.
+    """
     with open(manifest_path, "w") as out:
         for path in sorted(files):
-            out.write(f"{sha256(path)}  {os.path.basename(path)}\n")
+            rel = os.path.relpath(path, root)
+            out.write(f"{sha256(path)}  {rel}\n")
 
 
 def assemble_package(tooling_dir, images_dir, arm_dir, out_path,
@@ -352,7 +357,11 @@ def assemble_package(tooling_dir, images_dir, arm_dir, out_path,
     try:
         staging = os.path.join(temp_dir, "pkg")
         os.makedirs(staging)
-        shutil.copytree(tooling_dir, os.path.join(staging, "waydroid"))
+        # The install tree's usr/bin/waydroid is a symlink to
+        # ../lib/waydroid/waydroid.py; keep it (copytree's default
+        # dereferences, which breaks sys.path[0] resolution at runtime).
+        shutil.copytree(tooling_dir, os.path.join(staging, "waydroid"),
+                        symlinks=True)
         images = os.path.join(staging, "images")
         os.makedirs(images)
         shutil.copy(os.path.join(images_dir, "system.img"),
@@ -376,7 +385,8 @@ def assemble_package(tooling_dir, images_dir, arm_dir, out_path,
             for name in files:
                 if name != "SHA256SUMS":
                     checksum_files.append(os.path.join(root, name))
-        write_checksums(os.path.join(staging, "SHA256SUMS"), checksum_files)
+        write_checksums(os.path.join(staging, "SHA256SUMS"), staging,
+                        checksum_files)
 
         with tarfile.open(out_path, "w:xz") as tar:
             tar.add(staging, arcname=f"waydroid-{version}-{channel_label}")

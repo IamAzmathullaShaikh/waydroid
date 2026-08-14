@@ -258,6 +258,24 @@ def test_arm_tree_nested_under_system(tmp_path):
         arm_dir, "system", "etc", "init", "ndk_translation.rc"))
 
 
+def test_assemble_package_keeps_bin_symlink(tooling_tree, images_dir,
+                                             arm_dir, tmp_path):
+    """The usr/bin/waydroid symlink must survive packaging: installing a
+    dereferenced copy breaks sys.path[0] resolution (import tools)."""
+    bin_waydroid = os.path.join(tooling_tree, "usr", "bin", "waydroid")
+    os.remove(bin_waydroid)  # fixture creates it as a regular file
+    os.symlink("../lib/waydroid/waydroid.py", bin_waydroid)
+    out = str(tmp_path / "pkg.tar.xz")
+    package.assemble_package(tooling_tree, images_dir, arm_dir, out,
+                             "official", "1.6.4")
+    with tarfile.open(out, "r:xz") as tar:
+        member = next(n for n in tar.getnames()
+                      if n.endswith("/waydroid/usr/bin/waydroid"))
+        info = tar.getmember(member)
+        assert info.issym(), "usr/bin/waydroid must stay a symlink"
+        assert info.linkname == "../lib/waydroid/waydroid.py"
+
+
 def test_assemble_package_skips_arm(tooling_tree, images_dir, tmp_path):
     out = str(tmp_path / "pkg.tar.xz")
     package.assemble_package(tooling_tree, images_dir, None, out,
@@ -279,11 +297,13 @@ def test_sha256sums_manifest_validates(tooling_tree, images_dir, arm_dir,
     entries = dict(reversed(line.split("  "))
                     for line in checksums.strip().splitlines())
     assert entries  # non-empty
+    # Entries must be relative to the package root so `sha256sum -c` works
+    # from the extracted directory.
     with tarfile.open(out, "r:xz") as tar:
         names = tar.getnames()
-        for name, expected in entries.items():
+        for rel, expected in entries.items():
             member = next(n for n in names
-                          if n.endswith("/" + name)
+                          if n.endswith("/" + rel)
                           and tar.getmember(n).isfile())
             data = tar.extractfile(member).read()
             assert hashlib.sha256(data).hexdigest() == expected
